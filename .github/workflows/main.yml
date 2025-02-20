@@ -2,7 +2,6 @@ name: Deploy Django on Remote VM
 
 on:
   workflow_dispatch:  # Allows manual trigger
-  push:
 
 jobs:
   deploy:
@@ -18,7 +17,7 @@ jobs:
       - name: Connect to Remote VM & Install Django
         run: |
           echo "🚀 Connecting to Remote VM using Password Authentication..."
-          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
             set -e  # Exit if any command fails
             export DEBIAN_FRONTEND=noninteractive
 
@@ -29,7 +28,7 @@ jobs:
             # Detect if a reboot is needed
             if [ -f /var/run/reboot-required ]; then
                 echo "⚠️ Kernel update detected! Rebooting system now..."
-                sudo touch /tmp/reboot-required-action  # Create marker file
+                sudo touch /tmp/reboot-required-action  # Create marker file before reboot
                 sudo reboot
                 exit 0  # Stop execution as the system will reboot
             fi
@@ -40,12 +39,28 @@ jobs:
             echo "🚀 Installing Django..."
             sudo -H pip3 install --upgrade pip
             sudo -H pip3 install django
+
+            echo "🚀 Setting up Django Project..."
+            sudo mkdir -p /opt/django_project
+            sudo chmod -R 777 /opt/django_project
+            cd /opt/django_project
+            django-admin startproject myproject
+            cd myproject
+
+            echo "🚀 Modifying Django settings to allow external access..."
+            sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['*']/" myproject/settings.py
+
+            echo "🚀 Opening Port 8000..."
+            sudo ufw allow 8000 || true
+
+            echo "🚀 Running Django Server..."
+            nohup python3 manage.py runserver 0.0.0.0:8000 &
           EOF
 
       - name: Reconnect After Reboot (If Needed)
         run: |
           echo "🚀 Checking if VM was rebooted..."
-          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
             if [ -f /tmp/reboot-required-action ]; then
                 echo "🔄 VM has rebooted. Resuming setup..."
                 sudo rm -f /tmp/reboot-required-action  # Remove marker file
@@ -54,8 +69,23 @@ jobs:
                 sudo apt install -y python3 python3-pip
                 sudo -H pip3 install --upgrade pip
                 sudo -H pip3 install django
+
+                echo "🚀 Setting up Django Project..."
+                sudo mkdir -p /opt/django_project
+                sudo chmod -R 777 /opt/django_project
+                cd /opt/django_project
+                django-admin startproject myproject
+                cd myproject
+
+                echo "🚀 Modifying Django settings to allow external access..."
+                sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['*']/" myproject/settings.py
+
+                echo "🚀 Opening Port 8000..."
+                sudo ufw allow 8000 || true
+
+                echo "🚀 Running Django Server..."
+                nohup python3 manage.py runserver 0.0.0.0:8000 &
             else
                 echo "✅ No reboot detected. Django is already installed."
             fi
           EOF
-
