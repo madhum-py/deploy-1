@@ -7,7 +7,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -15,46 +14,51 @@ jobs:
       - name: Install SSH Client & SSHPass
         run: sudo apt-get install -y openssh-client sshpass
 
-      - name: Connect to Remote VM & Install Django
+      - name: Connect to VM & Check for Reboot
         run: |
-          echo "🚀 Connecting to Remote VM using Password Authentication..."
+          echo "🚀 Connecting to VM and checking for reboot status..."
           sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
-            set -e  # Exit if any command fails
-            export DEBIAN_FRONTEND=noninteractive
+            if [ -f /tmp/reboot-required-action ]; then
+                echo "🔄 System was rebooted. Removing flag and continuing deployment..."
+                sudo rm -f /tmp/reboot-required-action
+                exit 0
+            fi
+            echo "✅ No reboot detected. Proceeding with system update..."
+          EOF
 
-            echo "🚀 Updating System..."
+      - name: Perform System Update & Reboot if Required
+        run: |
+          echo "🚀 Updating system..."
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
+            export DEBIAN_FRONTEND=noninteractive
             sudo apt update -y && sudo apt upgrade -y
             sudo apt dist-upgrade -y
 
-            # Detect if a reboot is needed
             if [ -f /var/run/reboot-required ]; then
-                echo "⚠️ Kernel update detected! Rebooting system now..."
-                sudo touch /tmp/reboot-required-action  # Create marker file before reboot
+                echo "⚠️ Kernel update detected! Marking reboot-required flag..."
+                sudo touch /tmp/reboot-required-action
                 sudo reboot
-                exit 0  # Stop execution as the system will reboot
+                exit 0
             fi
+          EOF
 
-            echo "✅ No reboot required. Proceeding with Django installation..."
+      - name: Retry Deployment if First Run Failed
+        if: failure()
+        run: |
+          echo "⚠️ First run failed due to reboot. Retrying job in 60 seconds..."
+          sleep 60
+          gh workflow run deploy.yml -R ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Connect to VM & Install Django
+        run: |
+          echo "🚀 Connecting to Remote VM for Django Installation..."
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
+            echo "🚀 Installing required packages..."
             sudo apt install -y python3 python3-pip
 
             echo "🚀 Installing Django..."
             sudo -H pip3 install --upgrade pip
             sudo -H pip3 install django
-          EOF
-
-      - name: Reconnect After Reboot (If Needed)
-        run: |
-          echo "🚀 Checking if VM was rebooted..."
-          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
-            if [ -f /tmp/reboot-required-action ]; then
-                echo "🔄 VM has rebooted. Resuming setup..."
-                sudo rm -f /tmp/reboot-required-action  # Remove marker file
-
-                echo "🚀 Continuing Django installation..."
-                sudo apt install -y python3 python3-pip
-                sudo -H pip3 install --upgrade pip
-                sudo -H pip3 install django
-            else
-                echo "✅ No reboot detected. Django is already installed."
-            fi
           EOF
