@@ -65,7 +65,7 @@ jobs:
       - name: Install & Configure PostgreSQL
         run: |
             echo "🚀 Installing PostgreSQL..."
-            sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
+            sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
               sudo apt update -y
               sudo apt install -y postgresql postgresql-contrib libpq-dev
   
@@ -74,14 +74,14 @@ jobs:
               sudo systemctl start postgresql
   
               echo "🚀 Configuring PostgreSQL User and Database..."
-              sudo -u postgres psql <<SQL
+              sudo -u postgres psql <<EOF
               CREATE DATABASE registration_db;
               CREATE USER postgresql WITH PASSWORD 'postgresql123';
               ALTER ROLE postgresql SET client_encoding TO 'utf8';
               ALTER ROLE postgresql SET default_transaction_isolation TO 'read committed';
               ALTER ROLE postgresql SET timezone TO 'UTC';
               GRANT ALL PRIVILEGES ON DATABASE registration_db TO postgresql;
-              SQL
+              EOF
   
               echo "🚀 Configuring PostgreSQL to accept remote connections..."
               sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
