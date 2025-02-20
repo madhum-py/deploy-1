@@ -1,0 +1,41 @@
+name: Deploy Django on Remote VM
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+  push:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install SSH Client & SSHPass
+        run: sudo apt-get install -y openssh-client sshpass
+
+      - name: Connect to Remote VM & Install Django
+        run: |
+          echo "🚀 Connecting to Remote VM using Password Authentication..."
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
+            set -e  # Exit if any command fails
+            export DEBIAN_FRONTEND=noninteractive
+
+            echo "🚀 Updating System..."
+            sudo apt update -y && sudo apt upgrade -y
+            sudo apt dist-upgrade -y
+
+            if [ -f /var/run/reboot-required ]; then
+                echo "⚠️ Kernel update detected! Rebooting system now..."
+                sudo reboot
+                exit 0
+            fi
+
+            echo "✅ No reboot required. Proceeding with Django installation..."
+            sudo apt install -y python3 python3-pip
+
+            echo "🚀 Installing Django..."
+            sudo -H pip3 install --upgrade pip
+            sudo -H pip3 install django
+          EOF
