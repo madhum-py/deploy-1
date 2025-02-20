@@ -18,7 +18,7 @@ jobs:
       - name: Connect to Remote VM & Install Django
         run: |
           echo "🚀 Connecting to Remote VM using Password Authentication..."
-          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
             set -e  # Exit if any command fails
             export DEBIAN_FRONTEND=noninteractive
 
