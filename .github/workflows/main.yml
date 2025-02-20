@@ -16,7 +16,7 @@ jobs:
 
       - name: Connect to VM & Check for Reboot
         run: |
-          echo "🚀 Connecting to VM and checking for reboot status..."
+          echo "🚀 Checking if VM was rebooted..."
           sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
             if [ -f /tmp/reboot-required-action ]; then
                 echo "🔄 System was rebooted. Removing flag and continuing deployment..."
@@ -27,6 +27,7 @@ jobs:
           EOF
 
       - name: Perform System Update & Reboot if Required
+        id: update_system
         run: |
           echo "🚀 Updating system..."
           sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
@@ -41,20 +42,18 @@ jobs:
                 exit 0
             fi
           EOF
+        continue-on-error: true  # Prevents GitHub from marking the job as failed on reboot
 
-      - name: Retry Deployment if First Run Failed
-        if: failure()
+      - name: Auto-Retry If Reboot Occurs
+        if: failure() && steps.update_system.outcome == 'failure'
         run: |
-          echo "⚠️ First run failed due to reboot. Retrying job in 60 seconds..."
-          sleep 60
-          gh workflow run deploy.yml -R ${{ github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "⚠️ First run failed due to reboot. GitHub Actions will auto-retry this job."
+          exit 1  # Forces GitHub Actions to retry the workflow
 
       - name: Connect to VM & Install Django
         run: |
           echo "🚀 Connecting to Remote VM for Django Installation..."
-          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
             echo "🚀 Installing required packages..."
             sudo apt install -y python3 python3-pip
 
