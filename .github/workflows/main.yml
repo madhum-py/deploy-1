@@ -62,8 +62,8 @@ jobs:
             sudo -H pip3 install django
           EOF
 
-          - name: Install & Configure PostgreSQL
-          run: |
+      - name: Install & Configure PostgreSQL
+        run: |
             echo "🚀 Installing PostgreSQL..."
             sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
               sudo apt update -y
