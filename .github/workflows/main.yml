@@ -58,3 +58,4 @@ jobs:
                 echo "✅ No reboot detected. Django is already installed."
             fi
           EOF
+
