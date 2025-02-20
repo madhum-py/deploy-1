@@ -62,10 +62,10 @@ jobs:
             sudo -H pip3 install django
           EOF
 
-      - name: Install & Configure PostgreSQL
-        run: |
+          - name: Install & Configure PostgreSQL
+          run: |
             echo "🚀 Installing PostgreSQL..."
-            sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "${{ secrets.VM_USERNAME }}"@"${{ secrets.VM_IP }}" << 'EOF'
+            sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
               sudo apt update -y
               sudo apt install -y postgresql postgresql-contrib libpq-dev
   
@@ -74,28 +74,14 @@ jobs:
               sudo systemctl start postgresql
   
               echo "🚀 Configuring PostgreSQL User and Database..."
-              sudo -u postgres psql <<EOF
-              DO \$\$
-              BEGIN
-                  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'registration_db') THEN
-                      CREATE DATABASE registration_db;
-                  END IF;
-              END
-              \$\$;
-  
-              DO \$\$
-              BEGIN
-                  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgresql') THEN
-                      CREATE USER postgresql WITH PASSWORD 'postgresql123';
-                  END IF;
-              END
-              \$\$;
-  
-              ALTER ROLE postgresql SET client_encoding TO 'utf8';
-              ALTER ROLE postgresql SET default_transaction_isolation TO 'read committed';
-              ALTER ROLE postgresql SET timezone TO 'UTC';
-              GRANT ALL PRIVILEGES ON DATABASE registration_db TO postgresql;
-                EOF
+              sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='registration_db'" | grep -q 1 || sudo -u postgres psql -c "CREATE DATABASE registration_db;"
+              
+              sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='postgresql'" | grep -q 1 || sudo -u postgres psql -c "CREATE USER postgresql WITH PASSWORD 'postgresql123';"
+              
+              sudo -u postgres psql -c "ALTER ROLE postgresql SET client_encoding TO 'utf8';"
+              sudo -u postgres psql -c "ALTER ROLE postgresql SET default_transaction_isolation TO 'read committed';"
+              sudo -u postgres psql -c "ALTER ROLE postgresql SET timezone TO 'UTC';"
+              sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE registration_db TO postgresql;"
   
               echo "🚀 Configuring PostgreSQL to accept remote connections..."
               sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
@@ -105,4 +91,3 @@ jobs:
               echo "🚀 Restarting PostgreSQL to apply changes..."
               sudo systemctl restart postgresql
             EOF
-  
