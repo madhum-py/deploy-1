@@ -54,7 +54,6 @@ jobs:
                 sudo apt install -y python3 python3-pip
                 sudo -H pip3 install --upgrade pip
                 sudo -H pip3 install django
-                django-admin --version
             else
                 echo "✅ No reboot detected. Django is already installed."
             fi
