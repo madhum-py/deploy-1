@@ -134,7 +134,7 @@ jobs:
           echo "🚀 Connecting to VM and setting up project..."
           sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
             set -e  # Exit on error
-            cd /home/$VM_USERNAME || exit
+            cd ~ || exit
 
             if [ ! -d "django-app" ]; then
                 echo "🚀 Cloning repository for the first time..."
