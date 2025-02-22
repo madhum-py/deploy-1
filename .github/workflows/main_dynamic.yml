@@ -151,7 +151,7 @@ jobs:
             echo "🚀 Installing dependencies..."
             sudo apt install -y python3-pip
             sudo pip3 install --upgrade pip
-            sudo pip3 install requests django-extensions psycopg2
+            sudo pip3 install requests django-extensions psycopg2-binary
 
             echo "🚀 Updating Django settings..."
             sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['*']/" registration_project/settings.py
