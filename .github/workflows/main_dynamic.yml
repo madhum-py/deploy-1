@@ -137,7 +137,7 @@ jobs:
             echo "🚀 Connecting to VM for Django deployment..."
             sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
               set -e  # Exit on error
-              cd /home/$VM_USERNAME/django-app  # Navigate to copied project
+              cd ~/django-app  # Navigate to copied project
   
               echo "🚀 Updating Django settings..."
               sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['$VM_IP', 'localhost'\]/" registration_project/settings.py
