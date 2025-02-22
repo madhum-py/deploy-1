@@ -129,8 +129,8 @@ jobs:
             sudo systemctl restart postgresql
           EOF
   
-          - name: Deploy Django Application
-          run: |
+      - name: Deploy Django Application
+        run: |
             echo "🚀 Copying project files to remote VM..."
             sshpass -p "$VM_PASSWORD" scp -r -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no . "$VM_USERNAME@$VM_IP:/home/$VM_USERNAME/django-app"
   
