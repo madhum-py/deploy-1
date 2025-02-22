@@ -129,3 +129,37 @@ jobs:
             sudo systemctl restart postgresql
           EOF
   
+          - name: Deploy Django Application
+          run: |
+            echo "🚀 Copying project files to remote VM..."
+            sshpass -p "$VM_PASSWORD" scp -r -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no . "$VM_USERNAME@$VM_IP:/home/$VM_USERNAME/django-app"
+  
+            echo "🚀 Connecting to VM for Django deployment..."
+            sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+              set -e  # Exit on error
+              cd /home/$VM_USERNAME/django-app  # Navigate to copied project
+  
+              echo "🚀 Updating Django settings..."
+              sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['$VM_IP', 'localhost'\]/" registration_project/settings.py
+              sudo sed -i "s/'NAME': '.*'/'NAME': '$DB_NAME'/" registration_project/settings.py
+              sudo sed -i "s/'USER': '.*'/'USER': '$DB_USER'/" registration_project/settings.py
+              sudo sed -i "s/'PASSWORD': '.*'/'PASSWORD': '$DB_PASSWORD'/" registration_project/settings.py
+              sudo sed -i "s/'HOST': '.*'/'HOST': 'localhost'/" registration_project/settings.py
+              sudo sed -i "s/'PORT': '.*'/'PORT': '5432'/" registration_project/settings.py
+  
+              echo "🚀 Installing requests globally..."
+              sudo apt install -y python3-pip
+              sudo pip3 install --upgrade pip
+              sudo pip3 install requests
+  
+              echo "🚀 Running database migrations..."
+              sudo python3 manage.py migrate
+  
+              echo "🚀 Collecting static files..."
+              sudo python3 manage.py collectstatic --noinput
+  
+              echo "🚀 Starting Django server..."
+              sudo nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
+  
+              echo "✅ Django application deployed successfully!"
+            EOF
