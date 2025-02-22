@@ -95,32 +95,37 @@ jobs:
 
       - name: Install & Configure PostgreSQL
         run: |
+          DB_NAME="${{ secrets.DB_NAME }}"
+          DB_USER="${{ secrets.DB_USER }}"
+          DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+  
           echo "🚀 Installing PostgreSQL..."
-          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << EOF
             sudo apt update -y
             sudo apt install -y postgresql postgresql-contrib libpq-dev
-
+  
             echo "🚀 Starting PostgreSQL service..."
             sudo systemctl enable postgresql
             sudo systemctl start postgresql
-
+  
             echo "🚀 Configuring PostgreSQL User and Database..."
             sudo -u postgres bash -c "
             export HOME=/var/lib/postgresql
             cd ~postgres
-            psql -tAc \"SELECT 1 FROM pg_database WHERE datname='registration_db'\" | grep -q 1 || psql -c \"CREATE DATABASE registration_db;\"
-            psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='postgresql'\" | grep -q 1 || psql -c \"CREATE USER postgresql WITH PASSWORD 'postgresql123';\"
-            psql -c \"ALTER ROLE postgresql SET client_encoding TO 'utf8';\"
-            psql -c \"ALTER ROLE postgresql SET default_transaction_isolation TO 'read committed';\"
-            psql -c \"ALTER ROLE postgresql SET timezone TO 'UTC';\"
-            psql -c \"GRANT ALL PRIVILEGES ON DATABASE registration_db TO postgresql;\"
+            psql -tAc \"SELECT 1 FROM pg_database WHERE datname='$DB_NAME'\" | grep -q 1 || psql -c \"CREATE DATABASE $DB_NAME;\"
+            psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'\" | grep -q 1 || psql -c \"CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';\"
+            psql -c \"ALTER ROLE $DB_USER SET client_encoding TO 'utf8';\"
+            psql -c \"ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';\"
+            psql -c \"ALTER ROLE $DB_USER SET timezone TO 'UTC';\"
+            psql -c \"GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;\"
             "
-
+  
             echo "🚀 Configuring PostgreSQL to accept remote connections..."
             sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
-
+  
             echo "host all all 0.0.0.0/0 md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-
+  
             echo "🚀 Restarting PostgreSQL to apply changes..."
             sudo systemctl restart postgresql
           EOF
+  
