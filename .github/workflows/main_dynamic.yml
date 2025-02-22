@@ -1,0 +1,126 @@
+name: Deploy Django on Remote VM - Dynamic
+
+on:
+  workflow_dispatch:  # Allows manual trigger
+  push:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Azure CLI & SSH Client
+        run: |
+          echo "🚀 Installing Azure CLI..."
+          sudo apt-get update -y
+          sudo apt-get install -y azure-cli openssh-client sshpass jq
+
+      - name: Login to Azure with SPN
+        run: |
+          echo "🔑 Logging into Azure..."
+          az login --service-principal \
+            --username "${{ secrets.SPN_CLIENT_ID }}" \
+            --password "${{ secrets.SPN_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.SPN_TENANT_ID }}"
+
+      - name: Fetch VM Public IP from Azure
+        id: get-vm-ip
+        run: |
+          echo "🔍 Fetching VM Public IP..."
+          VM_IP=$(az vm show -d --resource-group meta-minds-rg --name meta-minds-vm --query publicIps -o tsv)
+          echo "VM_IP=${VM_IP}" >> $GITHUB_ENV
+          echo "✅ Found VM IP: $VM_IP"
+
+      - name: Fetch VM Credentials from Key Vault
+        id: get-vm-creds
+        run: |
+          echo "🔍 Fetching VM credentials from Key Vault..."
+          VM_USERNAME=$(az keyvault secret show --vault-name meta-minds-kv --name vm-username --query value -o tsv)
+          VM_PASSWORD=$(az keyvault secret show --vault-name meta-minds-kv --name vm-password --query value -o tsv)
+
+          echo "::add-mask::$VM_PASSWORD"  # Mask password in logs
+          echo "VM_USERNAME=${VM_USERNAME}" >> $GITHUB_ENV
+          echo "VM_PASSWORD=${VM_PASSWORD}" >> $GITHUB_ENV
+          echo "✅ Fetched VM credentials successfully!"
+
+      - name: Connect to VM & Check for Reboot
+        run: |
+          echo "🚀 Checking if VM was rebooted..."
+          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+            if [ -f /tmp/reboot-required-action ]; then
+                echo "🔄 System was rebooted. Removing flag and continuing deployment..."
+                sudo rm -f /tmp/reboot-required-action
+                exit 0
+            fi
+            echo "✅ No reboot detected. Proceeding with system update..."
+          EOF
+
+      - name: Perform System Update & Reboot if Required
+        id: update_system
+        run: |
+          echo "🚀 Updating system..."
+          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt update -y && sudo apt upgrade -y
+            sudo apt dist-upgrade -y
+
+            if [ -f /var/run/reboot-required ]; then
+                echo "⚠️ Kernel update detected! Marking reboot-required flag..."
+                sudo touch /tmp/reboot-required-action
+                sudo reboot
+                exit 0
+            fi
+          EOF
+        continue-on-error: true  # Prevents GitHub from marking the job as failed on reboot
+
+      - name: Auto-Retry If Reboot Occurs
+        if: failure() && steps.update_system.outcome == 'failure'
+        run: |
+          echo "⚠️ First run failed due to reboot. GitHub Actions will auto-retry this job."
+          exit 1  # Forces GitHub Actions to retry the workflow
+
+      - name: Connect to VM & Install Django
+        run: |
+          echo "🚀 Connecting to Remote VM for Django Installation..."
+          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+            echo "🚀 Installing required packages..."
+            sudo apt install -y python3 python3-pip
+
+            echo "🚀 Installing Django..."
+            sudo -H pip3 install --upgrade pip
+            sudo -H pip3 install django
+          EOF
+
+      - name: Install & Configure PostgreSQL
+        run: |
+          echo "🚀 Installing PostgreSQL..."
+          sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
+            sudo apt update -y
+            sudo apt install -y postgresql postgresql-contrib libpq-dev
+
+            echo "🚀 Starting PostgreSQL service..."
+            sudo systemctl enable postgresql
+            sudo systemctl start postgresql
+
+            echo "🚀 Configuring PostgreSQL User and Database..."
+            sudo -u postgres bash -c "
+            export HOME=/var/lib/postgresql
+            cd ~postgres
+            psql -tAc \"SELECT 1 FROM pg_database WHERE datname='registration_db'\" | grep -q 1 || psql -c \"CREATE DATABASE registration_db;\"
+            psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='postgresql'\" | grep -q 1 || psql -c \"CREATE USER postgresql WITH PASSWORD 'postgresql123';\"
+            psql -c \"ALTER ROLE postgresql SET client_encoding TO 'utf8';\"
+            psql -c \"ALTER ROLE postgresql SET default_transaction_isolation TO 'read committed';\"
+            psql -c \"ALTER ROLE postgresql SET timezone TO 'UTC';\"
+            psql -c \"GRANT ALL PRIVILEGES ON DATABASE registration_db TO postgresql;\"
+            "
+
+            echo "🚀 Configuring PostgreSQL to accept remote connections..."
+            sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
+
+            echo "host all all 0.0.0.0/0 md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+
+            echo "🚀 Restarting PostgreSQL to apply changes..."
+            sudo systemctl restart postgresql
+          EOF
