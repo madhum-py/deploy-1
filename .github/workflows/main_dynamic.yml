@@ -131,56 +131,75 @@ jobs:
   
       - name: Deploy Django Application
         run: |
-            echo "🚀 Connecting to VM and setting up project..."
-            sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << EOF
-              set -e  # Exit on error
-        
-              echo "📂 Navigating to home directory..."
-              cd ~ || exit
-        
-              export DB_NAME="${{ secrets.DB_NAME }}"
-              export DB_USER="${{ secrets.DB_USER }}"
-              export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-              export DB_HOST="$VM_IP"
-        
-              # ✅ Handling private repository authentication (if repo is private)
-              if [ ! -d "django-app" ]; then
-                  echo "🚀 Cloning repository..."
-                  git clone https://github.com/madhum-py/django-my-course.git django-app
-              else
-                  echo "🔄 Updating existing repository..."
-                  cd django-app
-                  git reset --hard  # Remove any uncommitted changes
-                  git pull origin main
-              fi
-        
-              cd django-app  # Navigate to project directory
-        
-              echo "🚀 Installing dependencies..."
-              sudo apt update -y
-              sudo apt install -y python3-pip
-              sudo pip3 install --upgrade pip
-              sudo pip3 install requests django-extensions psycopg2-binary
-        
-              echo "🚀 Updating Django settings..."
-              sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['*']/" registration_project/settings.py
-              sudo sed -i "s/'ENGINE': 'django.db.backends.sqlite3'/'ENGINE': 'django.db.backends.postgresql'/" registration_project/settings.py
-              sudo sed -i "s|'NAME': BASE_DIR / 'db.sqlite3'|'NAME': '\$DB_NAME'|" registration_project/settings.py
-              sudo sed -i "s/'USER': ''/'USER': '\$DB_USER'/" registration_project/settings.py
-              sudo sed -i "s/'PASSWORD': ''/'PASSWORD': '\$DB_PASSWORD'/" registration_project/settings.py
-              sudo sed -i "s/'HOST': 'localhost'/'HOST': '\$DB_HOST'/" registration_project/settings.py
-              sudo sed -i "s/'PORT': ''/'PORT': '5432'/" registration_project/settings.py
-        
-              echo "🚀 Running database migrations..."
-              sudo python3 manage.py migrate
-        
-              echo "🚀 Collecting static files..."
-              sudo python3 manage.py collectstatic --noinput
-        
-              echo "🚀 Restarting Django server..."
-              sudo pkill -f runserver || true  # Stop any running instance
-              sudo nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
-        
-              echo "✅ Django application deployed successfully!"
-            EOF
-        
+              echo "🚀 Connecting to VM and setting up project..."
+              sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << EOF
+                set -e  # Exit on error
+  
+                echo "📂 Navigating to home directory..."
+                cd ~ || exit
+  
+                export DB_NAME="${{ secrets.DB_NAME }}"
+                export DB_USER="${{ secrets.DB_USER }}"
+                export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+                export DB_HOST="$VM_IP"
+  
+                # ✅ Handling private repository authentication (if repo is private)
+                if [ ! -d "django-app" ]; then
+                    echo "🚀 Cloning repository..."
+                    git clone https://github.com/madhum-py/django-my-course.git django-app
+                else
+                    echo "🔄 Updating existing repository..."
+                    cd django-app
+                    git reset --hard  # Remove any uncommitted changes
+                    git pull origin main
+                fi
+  
+                cd django-app  # Navigate to project directory
+  
+                echo "🚀 Installing dependencies..."
+                sudo apt update -y
+                sudo apt install -y python3-pip
+                sudo pip3 install --upgrade pip
+                sudo pip3 install requests django-extensions psycopg2-binary
+  
+                echo "🚀 Updating Django settings..."
+  
+                SETTINGS_FILE="registration_project/settings.py"
+  
+                # Check if DATABASES exists
+                if grep -q "DATABASES =" "\$SETTINGS_FILE"; then
+                    echo "✅ DATABASES setting found, updating PostgreSQL configuration..."
+                    sudo sed -i "s/'ENGINE': 'django.db.backends.sqlite3'/'ENGINE': 'django.db.backends.postgresql'/" "\$SETTINGS_FILE"
+                    sudo sed -i "s|'NAME': BASE_DIR / 'db.sqlite3'|'NAME': '\$DB_NAME'|" "\$SETTINGS_FILE"
+                    sudo sed -i "s/'USER': ''/'USER': '\$DB_USER'/" "\$SETTINGS_FILE"
+                    sudo sed -i "s/'PASSWORD': ''/'PASSWORD': '\$DB_PASSWORD'/" "\$SETTINGS_FILE"
+                    sudo sed -i "s/'HOST': 'localhost'/'HOST': '\$DB_HOST'/" "\$SETTINGS_FILE"
+                    sudo sed -i "s/'PORT': ''/'PORT': '5432'/" "\$SETTINGS_FILE"
+                else
+                    echo "⚠️ DATABASES setting not found! Appending PostgreSQL configuration..."
+                    echo "" | sudo tee -a "\$SETTINGS_FILE"
+                    echo "DATABASES = {" | sudo tee -a "\$SETTINGS_FILE"
+                    echo "    'default': {" | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'ENGINE': 'django.db.backends.postgresql'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'NAME': '\$DB_NAME'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'USER': '\$DB_USER'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'PASSWORD': '\$DB_PASSWORD'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'HOST': '\$DB_HOST'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "        'PORT': '5432'," | sudo tee -a "\$SETTINGS_FILE"
+                    echo "    }" | sudo tee -a "\$SETTINGS_FILE"
+                    echo "}" | sudo tee -a "\$SETTINGS_FILE"
+                fi
+  
+                echo "🚀 Running database migrations..."
+                sudo python3 manage.py migrate
+  
+                echo "🚀 Collecting static files..."
+                sudo python3 manage.py collectstatic --noinput
+  
+                echo "🚀 Restarting Django server..."
+                sudo pkill -f runserver || true  # Stop any running instance
+                sudo nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
+  
+                echo "✅ Django application deployed successfully!"
+              EOF
+  
