@@ -2,7 +2,7 @@ name: Deploy Django on Remote VM
 
 on:
   workflow_dispatch:  # Allows manual trigger
-  push:
+  #push:
 
 jobs:
   deploy:
