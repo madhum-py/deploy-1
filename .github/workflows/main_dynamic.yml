@@ -95,16 +95,16 @@ jobs:
 
       - name: Install & Configure PostgreSQL
         run: |
-          DB_NAME="${{ secrets.DB_NAME }}"
-          DB_USER="${{ secrets.DB_USER }}"
-          DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-  
           echo "🚀 Installing PostgreSQL..."
           sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" \
             "export VM_IP='$VM_IP' && bash -s" << 'EOF'
             sudo apt update -y
             sudo apt install -y postgresql postgresql-contrib libpq-dev
-  
+
+            DB_NAME="${{ secrets.DB_NAME }}"
+            DB_USER="${{ secrets.DB_USER }}"
+            DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+
             echo "🚀 Starting PostgreSQL service..."
             sudo systemctl enable postgresql
             sudo systemctl start postgresql
