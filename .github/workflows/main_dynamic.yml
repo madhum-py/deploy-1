@@ -137,7 +137,15 @@ jobs:
               set -e  # Exit on error
               echo '📂 Navigating to home directory...'
               cd ~ || exit
-        
+
+              # ✅ Install Azure CLI if not already installed
+              if ! command -v az &> /dev/null; then
+                  echo "🔧 Installing Azure CLI..."
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+              else
+                  echo "✅ Azure CLI already installed!"
+              fi
+                
               # ✅ Log in to Azure using SPN
               echo "🔑 Logging in to Azure with Service Principal..."
               az login --service-principal \
