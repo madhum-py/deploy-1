@@ -180,6 +180,14 @@ jobs:
               fi
         
               cd django-app  # Navigate to project directory
+
+              STATIC_DIR="static"
+              if [ ! -d "$STATIC_DIR" ]; then
+                echo "🚀 Static directory not found. Creating it..."
+                mkdir -p "$STATIC_DIR"
+              else
+                echo "✅ Static directory already exists."
+              fi
         
               echo "🚀 Installing dependencies..."
               sudo apt update -y
