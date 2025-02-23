@@ -222,6 +222,9 @@ jobs:
                   echo "}" | sudo tee -a "$SETTINGS_FILE"
               fi
   
+              echo "🚀 Updating ALLOWED_HOSTS in Django settings..."
+              sudo sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['*']/" "$SETTINGS_FILE"
+
               echo "🚀 Running database migrations..."
               sudo python3 manage.py migrate
   
