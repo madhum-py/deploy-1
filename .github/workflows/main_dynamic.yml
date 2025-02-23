@@ -180,9 +180,11 @@ jobs:
                     git pull origin main
                 fi
         
-                cd django-app  # Navigate to project directory
-        
-                STATIC_DIR="static"
+                cd ~/django-app || { echo "❌ Failed to enter django-app directory!"; exit 1; }
+
+                # Explicitly set full path for the static directory
+                STATIC_DIR="$(pwd)/static"
+
                 if [ ! -d "$STATIC_DIR" ]; then
                   echo "🚀 Static directory not found. Creating it..."
                   mkdir -p "$STATIC_DIR"
