@@ -176,7 +176,7 @@ jobs:
                   echo "🔄 Updating existing repository..."
                   cd django-app
                   git reset --hard  # Remove any uncommitted changes
-                  git pull origin main
+                  git pull origin master
               fi
   
               cd ~/django-app || { echo "❌ Failed to enter django-app directory!"; exit 1; }
