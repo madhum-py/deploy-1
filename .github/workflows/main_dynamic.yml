@@ -234,4 +234,3 @@ jobs:
         
               echo "✅ Django application deployed successfully!"
             EOF
-        
