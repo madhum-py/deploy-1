@@ -129,108 +129,111 @@ jobs:
             echo "🚀 Restarting PostgreSQL to apply changes..."
             sudo systemctl restart postgresql
           EOF
+
       - name: Deploy Django Application
         run: |
-            echo "🚀 Connecting to VM and setting up project..."
-            sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << 'EOF'
-              
-              set -e  # Exit on error
-              echo '📂 Navigating to home directory...'
-              cd ~ || exit
-
-              # ✅ Install Azure CLI if not already installed
-              if ! command -v az &> /dev/null; then
-                  echo "🔧 Installing Azure CLI..."
-                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-              else
-                  echo "✅ Azure CLI already installed!"
-              fi
+              echo "🚀 Connecting to VM and setting up project..."
+              sshpass -p "$VM_PASSWORD" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no "$VM_USERNAME@$VM_IP" << EOF
                 
-              # ✅ Log in to Azure using SPN
-              echo "🔑 Logging in to Azure with Service Principal..."
-              az login --service-principal \
-                --username "${{ secrets.SPN_CLIENT_ID }}" \
-                --password "${{ secrets.SPN_SECRET }}" \
-                --tenant "${{ secrets.SPN_TENANT_ID }}"
+                set -e  # Exit on error
+                echo '📂 Navigating to home directory...'
+                cd ~ || exit
         
-              # ✅ Fetch the VM's public IP dynamically
-              echo "🌍 Fetching VM Public IP from Azure..."
-              export DB_HOST=$(az network public-ip show \
-                --resource-group "meta-minds-rg" \
-                --name "meta-minds-public-ip" \//
-                --query "ipAddress" \
-                --output tsv)
+                # ✅ Install Azure CLI if not already installed
+                if ! command -v az &> /dev/null; then
+                    echo "🔧 Installing Azure CLI..."
+                    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                else
+                    echo "✅ Azure CLI already installed!"
+                fi
+                  
+                # ✅ Log in to Azure using SPN
+                echo "🔑 Logging in to Azure with Service Principal..."
+                az login --service-principal \
+                  --username "${{ secrets.SPN_CLIENT_ID }}" \
+                  --password "${{ secrets.SPN_SECRET }}" \
+                  --tenant "${{ secrets.SPN_TENANT_ID }}"
         
-              echo "✅ VM Public IP: $DB_HOST"
+                # ✅ Fetch the VM's public IP dynamically
+                echo "🌍 Fetching VM Public IP from Azure..."
+                export DB_HOST=$(az network public-ip show \
+                  --resource-group "meta-minds-rg" \
+                  --name "meta-minds-public-ip" \
+                  --query "ipAddress" \
+                  --output tsv)
         
-              # ✅ Set Database credentials
-              export DB_NAME="${{ secrets.DB_NAME }}"
-              export DB_USER="${{ secrets.DB_USER }}"
-              export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+                echo "✅ VM Public IP: $DB_HOST"
         
-              # ✅ Handling private repository authentication (if repo is private)
-              if [ ! -d "django-app" ]; then
-                  echo "🚀 Cloning repository..."
-                  git clone https://github.com/madhum-py/django-my-course.git django-app
-              else
-                  echo "🔄 Updating existing repository..."
-                  cd django-app
-                  git reset --hard  # Remove any uncommitted changes
-                  git pull origin main
-              fi
+                # ✅ Set Database credentials
+                export DB_NAME="${{ secrets.DB_NAME }}"
+                export DB_USER="${{ secrets.DB_USER }}"
+                export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
         
-              cd django-app  # Navigate to project directory
-
-              STATIC_DIR="static"
-              if [ ! -d "$STATIC_DIR" ]; then
-                echo "🚀 Static directory not found. Creating it..."
-                mkdir -p "$STATIC_DIR"
-              else
-                echo "✅ Static directory already exists."
-              fi
+                # ✅ Handling private repository authentication (if repo is private)
+                if [ ! -d "django-app" ]; then
+                    echo "🚀 Cloning repository..."
+                    git clone https://github.com/madhum-py/django-my-course.git django-app
+                else
+                    echo "🔄 Updating existing repository..."
+                    cd django-app
+                    git reset --hard  # Remove any uncommitted changes
+                    git pull origin main
+                fi
         
-              echo "🚀 Installing dependencies..."
-              sudo apt update -y
-              sudo apt install -y python3-pip
-              sudo pip3 install --upgrade pip
-              sudo pip3 install requests django-extensions psycopg2-binary
+                cd django-app  # Navigate to project directory
         
-              echo "🚀 Updating Django settings..."
-              SETTINGS_FILE="registration_project/settings.py"
+                STATIC_DIR="static"
+                if [ ! -d "$STATIC_DIR" ]; then
+                  echo "🚀 Static directory not found. Creating it..."
+                  mkdir -p "$STATIC_DIR"
+                else
+                  echo "✅ Static directory already exists."
+                fi
         
-              # Ensure DATABASES section exists and update fields dynamically
-              if grep -q "DATABASES =" "\$SETTINGS_FILE"; then
-                  echo "✅ DATABASES section found, updating PostgreSQL settings..."
-                  sudo sed -i "s/'ENGINE': 'django.db.backends.sqlite3'/'ENGINE': 'django.db.backends.postgresql'/" "\$SETTINGS_FILE"
-                  sudo sed -i "s|'NAME': BASE_DIR / 'db.sqlite3'|'NAME': '\$DB_NAME'|" "\$SETTINGS_FILE"
-                  sudo sed -i "s/'USER': ''/'USER': '\$DB_USER'/" "\$SETTINGS_FILE"
-                  sudo sed -i "s/'PASSWORD': ''/'PASSWORD': '\$DB_PASSWORD'/" "\$SETTINGS_FILE"
-                  sudo sed -i "s/'HOST': ''/'HOST': '\$DB_HOST'/" "\$SETTINGS_FILE"
-                  sudo sed -i "s/'PORT': ''/'PORT': '5432'/" "\$SETTINGS_FILE"
-              else
-                  echo "⚠️ DATABASES section not found! Adding PostgreSQL configuration..."
-                  echo "" | sudo tee -a "\$SETTINGS_FILE"
-                  echo "DATABASES = {" | sudo tee -a "\$SETTINGS_FILE"
-                  echo "    'default': {" | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'ENGINE': 'django.db.backends.postgresql'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'NAME': '\$DB_NAME'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'USER': '\$DB_USER'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'PASSWORD': '\$DB_PASSWORD'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'HOST': '\$DB_HOST'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "        'PORT': '5432'," | sudo tee -a "\$SETTINGS_FILE"
-                  echo "    }" | sudo tee -a "\$SETTINGS_FILE"
-                  echo "}" | sudo tee -a "\$SETTINGS_FILE"
-              fi
+                echo "🚀 Installing dependencies..."
+                sudo apt update -y
+                sudo apt install -y python3-pip
+                sudo pip3 install --upgrade pip
+                sudo pip3 install requests django-extensions psycopg2-binary
         
-              echo "🚀 Running database migrations..."
-              sudo python3 manage.py migrate
+                echo "🚀 Updating Django settings..."
+                SETTINGS_FILE="registration_project/settings.py"
         
-              echo "🚀 Collecting static files..."
-              sudo python3 manage.py collectstatic --noinput
+                # Ensure DATABASES section exists and update fields dynamically
+                if grep -q "DATABASES =" "$SETTINGS_FILE"; then
+                    echo "✅ DATABASES section found, updating PostgreSQL settings..."
+                    sudo sed -i "s/'ENGINE': 'django.db.backends.sqlite3'/'ENGINE': 'django.db.backends.postgresql'/" "$SETTINGS_FILE"
+                    sudo sed -i "s|'NAME': BASE_DIR / 'db.sqlite3'|'NAME': '$DB_NAME'|" "$SETTINGS_FILE"
+                    sudo sed -i "s/'USER': '.*'/'USER': '$DB_USER'/" "$SETTINGS_FILE"
+                    sudo sed -i "s/'PASSWORD': '.*'/'PASSWORD': '$DB_PASSWORD'/" "$SETTINGS_FILE"
+                    sudo sed -i "s/'HOST': '.*'/'HOST': '$DB_HOST'/" "$SETTINGS_FILE"
+                    sudo sed -i "s/'PORT': '.*'/'PORT': '5432'/" "$SETTINGS_FILE"
+                else
+                    echo "⚠️ DATABASES section not found! Adding PostgreSQL configuration..."
+                    sudo tee -a "$SETTINGS_FILE" > /dev/null <<EOL
+                    DATABASES = {
+                        'default': {
+                            'ENGINE': 'django.db.backends.postgresql',
+                            'NAME': '$DB_NAME',
+                            'USER': '$DB_USER',
+                            'PASSWORD': '$DB_PASSWORD',
+                            'HOST': '$DB_HOST',
+                            'PORT': '5432',
+                        }
+                    }
+                    EOL
+                fi
         
-              echo "🚀 Restarting Django server..."
-              sudo pkill -f runserver || true  # Stop any running instance
-              sudo nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
+                echo "🚀 Running database migrations..."
+                sudo python3 manage.py migrate
         
-              echo "✅ Django application deployed successfully!"
-            EOF
+                echo "🚀 Collecting static files..."
+                sudo python3 manage.py collectstatic --noinput
+        
+                echo "🚀 Restarting Django server..."
+                sudo pkill -f runserver || true  # Stop any running instance
+                sudo nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
+        
+                echo "✅ Django application deployed successfully!"
+              EOF
+        
