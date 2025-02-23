@@ -157,7 +157,7 @@ jobs:
               echo "🌍 Fetching VM Public IP from Azure..."
               export DB_HOST=$(az network public-ip show \
                 --resource-group "meta-minds-rg" \
-                --name "meta-minds-public-ip" \
+                --name "meta-minds-public-ip" \//
                 --query "ipAddress" \
                 --output tsv)
         
